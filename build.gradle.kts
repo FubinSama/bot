@@ -30,6 +30,7 @@ dependencies {
         exclude("io.lettuce:lettuce-core")
     }
     implementation("com.fasterxml.jackson.core:jackson-databind")
+    implementation("apache-httpclient:commons-httpclient:3.1")
     implementation("redis.clients:jedis")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")

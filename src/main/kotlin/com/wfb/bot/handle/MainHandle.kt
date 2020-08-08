@@ -50,11 +50,12 @@ class MainHandle {
         val config = BotConfiguration()
         config.fileBasedDeviceInfo(devicePath)
         val bot = Bot(qqConstants.id.toLong(), qqConstants.password, config).alsoLogin()//新建Bot并登录
+
         bot.subscribeMessages {
             this.always {
                 if (this.sender.id == this.bot.selfQQ.id) return@always
                 when {
-                    this.message.content.startsWith(".") -> reply(textHandle.doHandle(this))
+                    this.message.content.startsWith(".") -> textHandle.doHandle(this)?.apply { this@always.reply(this) }
                     this.message.content.contains("斌") -> reply("我最喜欢斌大大了(*^__^*) 嘻嘻……")
                     this.message.content == "你好" -> reply("你好( ⊙ o ⊙ )！")
                     this.message.firstIsInstanceOrNull<At>()?.target == bot.id -> quoteReply(At(sender as Member) + " 给爷爬╭(╯^╰)╮")
@@ -65,23 +66,24 @@ class MainHandle {
         // 复读机
         bot.subscribeGroupMessages {
             this.always {
-                val thisMessage = this.message.last()
-                wfbPrint(thisMessage.toString())
+                val key = this.subject.id.toString()
+                val thisMessage = this.message.last().toString()
+                wfbPrint("thisMessage[本条消息]: $thisMessage")
                 val opsForValue = redisTemplate.opsForValue()
-                val triple = opsForValue[this.subject.id.toString()]
-                wfbPrint(triple.toString())
+                val triple = opsForValue[key]
+                wfbPrint("triple[上条消息]: ${triple.toString()}")
                 if (triple != null) {
-                    if (thisMessage.toString() == triple.second) { // 跟上一条消息相同
+                    if (thisMessage == triple.second) { // 跟上一条消息相同
                         if (triple.first != this.sender.id && !triple.third) { // 跟上一条消息不是一个人发送的且该条消息还未复读
                             // 复读该条消息并设置该条消息为已复读
-                            opsForValue[this.subject.id.toString()] = Triple(this.sender.id, thisMessage.toString(), true)
+                            opsForValue[key] = Triple(this.sender.id, thisMessage, true)
                             reply(this.message)
-                        } else { // 跟上一条消息不同，需要更新缓存
-                            opsForValue[this.subject.id.toString()] = Triple(this.sender.id, thisMessage.toString(), false)
                         }
+                    } else { // 跟上一条消息不同，需要更新缓存
+                        opsForValue[key] = Triple(this.sender.id, thisMessage, false)
                     }
                 } else {  // 还没有缓存，需要更新缓存
-                    opsForValue[this.subject.id.toString()] = Triple(this.sender.id, thisMessage.toString(), false)
+                    opsForValue[key] = Triple(this.sender.id, thisMessage, false)
                 }
             }
         }
@@ -91,6 +93,7 @@ class MainHandle {
             // val thisMessage = this.message.last()
             //TODO 根据消息的不同分别进行处理，并存储到数据库
         }
+
         // 好友消息撤回，api不支持
         bot.subscribeAlways<MessageRecallEvent.FriendRecall> {
             val friend = this.bot.getFriend(this.operator)
@@ -99,32 +102,40 @@ class MainHandle {
             wfbPrint(this.operator.toString())
             this.bot.friends[this.operator].sendMessage(Image(image.imageId))
         }
+
         // 群友消息撤回
         bot.subscribeAlways<MessageRecallEvent.GroupRecall> {
             val stream = ClassPathResource(pictureConstants.recall).inputStream
             val image = this.group.uploadImage(stream)
             this.group.sendMessage(At(this.author) + Image(image.imageId))
         }
+
         // 机器人加入群组
         bot.subscribeAlways<BotJoinGroupEvent> {
             this.group.sendMessage(PlainText(TipConstants.join))
         }
+
         // 机器人新加朋友
         bot.subscribeAlways<FriendAddEvent> {
             this.friend.sendMessage(PlainText(TipConstants.join))
         }
+
         // 新人入群
         bot.subscribeAlways<MemberJoinEvent> { this.group.sendMessage(PlainText(this.member.nameCardOrNick.newMember())) }
+
         // 某人被禁言
         bot.subscribeAlways<MemberMuteEvent> { this.group.sendMessage(PlainText(this.member.nameCardOrNick.memberMute())) }
+
         // 某人称为管理员
         bot.subscribeAlways<MemberPermissionChangeEvent> {
             if (this.member.permission == MemberPermission.ADMINISTRATOR) {
                 this.group.sendMessage(PlainText(this.member.nameCardOrNick.changeToAdmin()))
             }
         }
+
         // 某人对小斌发起临时会话
         bot.subscribeTempMessages { this.always { reply(TipConstants.tempMessage) } }
+
         bot.join() // 等待 Bot 离线, 避免主线程退出
     }
 }
